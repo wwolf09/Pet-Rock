@@ -1,5 +1,5 @@
 from math import trunc
-
+import time
 import discord
 from Cryptodome.SelfTest.Hash.test_cSHAKE import descr
 from discord import app_commands
@@ -19,6 +19,10 @@ client = discord.Client(command_prefix=',', intents=intents)
 tree = app_commands.CommandTree(client)
 hasPet = pickledb.load('rock', True)
 stats = pickledb.load('stats', True)
+
+async def embed_make(title, description, color):
+    return_this = discord.Embed(description=description, colour= color, title=title)
+    return return_this
 
 @client.event
 async def on_ready():
@@ -66,6 +70,21 @@ async def on_message(message: discord.Message):
             new_level = stats.dget(str(author_id), "level")
             await message.channel.send(content=f'**{author_name} The Rock** has leveled up to lvl {new_level}!')
 
+@tree.command(name="challenge", description="challenge someone with rock paper scissors to steal their hp and xp!")
+async def challenge(interaction: discord.Interaction, member: discord.Member, xp: int):
+    challenger = interaction.user.name
+    to_be_challenged = member.name
+    await interaction.channel.send(embed= await embed_make("Challenger Approaches!", f"{challenger} challenges {to_be_challenged} for {xp}xp!",discord.Color.red() ))
+
+@tree.command(name="daily", description="daily rewards to be claimed")
+async def daily(interaction: discord.Interaction):
+    author_id = interaction.user.id
+    current_time = int(time.time())
+
+    if hasPet.exists(author_id):
+        last_claim = stats.dget(author_id, 'last_daily_claim')
+
+
 @tree.command(name="rock-status", description="take a look at the status of your pet rock!")
 async def rock_status(interaction: discord.Interaction):
     list_users = hasPet.lgetall('hasPet')
@@ -79,6 +98,7 @@ async def rock_status(interaction: discord.Interaction):
     else:
         hasPet.ladd('hasPet', interaction.user.id)
         stats.dcreate(str(interaction.user.id))
+        stats.dadd(str(interaction.user.id), ("last_daily_claim", 0))
         stats.dadd(str(interaction.user.id), ("level", 1))
         stats.dadd(str(interaction.user.id), ("hp", 100))
         stats.dadd(str(interaction.user.id), ("XP", 1))
