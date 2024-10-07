@@ -1,3 +1,4 @@
+import enum
 from math import trunc
 import time
 import discord
@@ -45,8 +46,9 @@ async def returnStats(ID):
     rock_hp = stats.dget(str(ID), "hp")
     print(stats.dexists(str(ID), "XP"))
     rock_xp = stats.dget(str(ID), "XP")
+    pebbles = stats.dget(str(ID), "pebbles")
 
-    return_this_nerd_lmao = f'**Level**: {rock_level} \n**HP**: {rock_hp} \nXP:{rock_xp}'
+    return_this_nerd_lmao = f'**Level**: {rock_level} \n**HP**: {rock_hp} \n**XP**:{rock_xp} \n**Pebbles**:{pebbles}'
     return return_this_nerd_lmao
 
 @client.event
@@ -96,6 +98,33 @@ async def daily(interaction: discord.Interaction):
             await interaction.channel.send(embed= await embed_make("Daily Claimed!",f'You have gained your **{new_money}** pebbles!', discord.Color.green()))
         else:
             await interaction.channel.send(embed = await embed_make("Daily already claimed!", f'Please wait for your next claim!', discord.Color.red()))
+
+class black_red(enum.Enum):
+    black = "black"
+    red = "red"
+
+@tree.command(name="roulette", description = "let's go gambling!")
+async def roulette(interaction: discord.Interaction, choice: black_red, bet: int):
+    gamble = ["black", "red"]
+    rand = random.choice(gamble)
+    print(choice)
+    print(rand)
+
+    User_Money = stats.dget(str(interaction.user.id), "pebbles")
+
+    if User_Money > bet or User_Money == bet:
+        if rand == "red" and choice == black_red.red or rand == "black" and choice == black_red.black:
+            current_money = stats.dget(str(interaction.user.id), "pebbles")
+            new_money = current_money + (bet*2)
+            stats.dadd(str(interaction.user.id), ("pebbles", (bet * 2)))
+            print("gambling succeed")
+        else:
+            current_money = stats.dget(str(interaction.user.id), "pebbles")
+            new_money = current_money - bet
+            stats.dadd(str(interaction.user.id), ("pebbles", (new_money)))
+            print("gambling failed")
+    else:
+        await interaction.channel.send(embed=await embed_make(f'Not enough pebbles!', f'You need more pebbles to gamble!', discord.Color.red()))
 
 @tree.command(name="rock-status", description="take a look at the status of your pet rock!")
 async def rock_status(interaction: discord.Interaction):
