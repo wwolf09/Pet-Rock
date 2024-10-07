@@ -81,9 +81,21 @@ async def daily(interaction: discord.Interaction):
     author_id = interaction.user.id
     current_time = int(time.time())
 
-    if hasPet.exists(author_id):
-        last_claim = stats.dget(author_id, 'last_daily_claim')
+    if author_id in hasPet.lgetall('hasPet'):
+        last_claim = int(stats.dget(str(author_id), 'last_daily_claim'))
+        money = stats.dget(str(author_id), 'pebbles')
+        print(current_time)
+        print(last_claim)
+        if current_time - last_claim >= 86400:
+            print("true")
+            new_money = money + 100 * (stats.dget(str(author_id), "level") / 2)
+            stats.dadd(str(interaction.user.id), ("pebbles", new_money))
+            print("sent")
+            stats.dadd(str(interaction.user.id), ("last_daily_claim", current_time))
 
+            await interaction.channel.send(embed= await embed_make("Daily Claimed!",f'You have gained your **{new_money}** pebbles!', discord.Color.green()))
+        else:
+            await interaction.channel.send(embed = await embed_make("Daily already claimed!", f'Please wait for your next claim!', discord.Color.red()))
 
 @tree.command(name="rock-status", description="take a look at the status of your pet rock!")
 async def rock_status(interaction: discord.Interaction):
@@ -102,6 +114,7 @@ async def rock_status(interaction: discord.Interaction):
         stats.dadd(str(interaction.user.id), ("level", 1))
         stats.dadd(str(interaction.user.id), ("hp", 100))
         stats.dadd(str(interaction.user.id), ("XP", 1))
+        stats.dadd(str(interaction.user.id), ("pebbles", 0))
         print(stats.dget(str(interaction.user.id), "level"))
         print(stats.dget(str(interaction.user.id), "hp"))
         print(stats.dget(str(interaction.user.id), "XP"))
