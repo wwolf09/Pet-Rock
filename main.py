@@ -1,8 +1,10 @@
 import enum
 from math import trunc
+import math
 import time
 import discord
 from Cryptodome.SelfTest.Hash.test_cSHAKE import descr
+from Cryptodome.Util.number import ceil_div
 from discord import app_commands
 from discord.ext import commands
 import random
@@ -24,6 +26,16 @@ stats = pickledb.load('stats', True)
 async def embed_make(title, description, color):
     return_this = discord.Embed(description=description, colour= color, title=title)
     return return_this
+
+async def multiplierCalculator(ID, reward):
+    userMultiplier = stats.dget(str(ID), "multiplier")
+
+    finalreward = round(reward)
+
+    for num in userMultiplier:
+        finalreward *= num
+
+    return finalreward
 
 @client.event
 async def on_ready():
@@ -47,8 +59,11 @@ async def returnStats(ID):
     print(stats.dexists(str(ID), "XP"))
     rock_xp = stats.dget(str(ID), "XP")
     pebbles = stats.dget(str(ID), "pebbles")
+    multiplier = stats.dget(str(ID), "multiplier")
 
-    return_this_nerd_lmao = f'**Level**: {rock_level} \n**HP**: {rock_hp} \n**XP**:{rock_xp} \n**Pebbles**:{pebbles}'
+    total_multi = math.prod(multiplier)
+
+    return_this_nerd_lmao = f'**Level**: {rock_level} \n**HP**: {rock_hp} \n**XP**:{rock_xp} \n**Pebbles**:{pebbles} \n**Total Multiplier:**{total_multi}'
     return return_this_nerd_lmao
 
 @client.event
@@ -62,7 +77,7 @@ async def on_message(message: discord.Message):
         current_level = stats.dget(str(author_id), "level")
         required_next_xp = 100 * (current_level/2)
 
-        newxp = current_xp + 3
+        newxp = current_xp + await multiplierCalculator(author_id, 3)
         print(newxp)
         stats.dadd(author_id, ("XP", newxp))
         print(stats.dget(str(author_id),"XP"))
@@ -115,14 +130,16 @@ async def roulette(interaction: discord.Interaction, choice: black_red, bet: int
     if User_Money > bet or User_Money == bet:
         if rand == "red" and choice == black_red.red or rand == "black" and choice == black_red.black:
             current_money = stats.dget(str(interaction.user.id), "pebbles")
-            new_money = current_money + (bet*2)
-            stats.dadd(str(interaction.user.id), ("pebbles", (bet * 2)))
+            new_money = current_money + (await multiplierCalculator(str(interaction.user.id), (bet*2)))
+            stats.dadd(str(interaction.user.id), ("pebbles", new_money))
+            await interaction.channel.send(embed=await embed_make(f"Let's go gambling!", f'Received **{(await multiplierCalculator(str(interaction.user.id), (bet*2)))} pebbles!**', discord.Color.green()))
             print("gambling succeed")
         else:
             current_money = stats.dget(str(interaction.user.id), "pebbles")
             new_money = current_money - bet
             stats.dadd(str(interaction.user.id), ("pebbles", (new_money)))
             print("gambling failed")
+            await interaction.channel.send(embed=await embed_make(f'Aw dang it!', f'Gambling failed. You lost **{bet} pebbles.**',discord.Color.red()))
     else:
         await interaction.channel.send(embed=await embed_make(f'Not enough pebbles!', f'You need more pebbles to gamble!', discord.Color.red()))
 
@@ -144,6 +161,7 @@ async def rock_status(interaction: discord.Interaction):
         stats.dadd(str(interaction.user.id), ("hp", 100))
         stats.dadd(str(interaction.user.id), ("XP", 1))
         stats.dadd(str(interaction.user.id), ("pebbles", 0))
+        stats.dadd(str(interaction.user.id), ("multiplier", [1.5,1.5,1.5,1.5,1.5]))
         print(stats.dget(str(interaction.user.id), "level"))
         print(stats.dget(str(interaction.user.id), "hp"))
         print(stats.dget(str(interaction.user.id), "XP"))
