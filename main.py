@@ -38,6 +38,9 @@ async def multiplierCalculator(ID, reward):
 
     return finalreward
 
+async def toPercent(multiplier):
+    return (multiplier - 1) * 100
+
 @client.event
 async def on_ready():
     await tree.sync()
@@ -46,6 +49,7 @@ async def on_ready():
     if not hasPet.exists('hasPet'):
         hasPet.lcreate('hasPet')
         stats.dcreate('stats')
+        storage.dcreate('storage')
 
 async def returnstatus(id):
     name = await client.fetch_user(id)
@@ -172,15 +176,84 @@ async def view(interaction: discord.Interaction):
 
     await interaction.channel.send(embed=embed)
 
-@tree.command(name="buy", description="let's go buying!")
+
+@tree.command(name="buy", description="Let's go buying!")
 async def buy(interaction: discord.Interaction, item: str):
-    authorid = interaction.user.id
+    authorid = str(interaction.user.id)
+
+    # Loop through the shop items to find a match
     for category, items in shop_items.items():
         for inItem in items:
             if item.lower() == inItem["name"].lower():
+                current_items = storage.dget(authorid, category) or []
+
+                # Check if the item already exists in the user's inventory
                 if category == "multipliers":
-                    print(storage.dadd(str(authorid), ("multipliers", (str(inItem["name"], int(inItem["boost"]))))))
-                await interaction.channel.send(embed = await embed_make(f"{interaction.user.name} bought {inItem["name"]}", f"*{inItem["description"]}*", discord.Color.green()))
+                    # Check for existing multipliers
+                    if any(existing_item[0] == inItem["name"] for existing_item in current_items):
+                        await interaction.response.send_message(f"You already own the multiplier **{inItem['name']}**!",
+                                                                ephemeral=True)
+                        return
+                    else:
+                        # Add new multiplier
+                        current_items.append((inItem["name"], inItem["boost"]))
+                elif category == "companions":
+                    # Check for existing companions
+                    if inItem["name"] in current_items:
+                        await interaction.response.send_message(f"You already own the companion **{inItem['name']}**!",
+                                                                ephemeral=True)
+                        return
+                    else:
+                        # Add new companion
+                        current_items.append(inItem["name"])
+                else:
+                    # If the category is not recognized
+                    await interaction.response.send_message("This category is not valid.", ephemeral=True)
+                    return
+
+                # Store the updated inventory
+                storage.dadd(authorid, (category, current_items))
+
+                await interaction.response.send_message(embed=await embed_make(
+                    f"{interaction.user.name} bought {inItem['name']}",
+                    f"*{inItem['description']}*",
+                    discord.Color.green()
+                ))
+                return
+
+    # If no item matches, send an error message
+    await interaction.response.send_message(f"Item '{item}' not found in the shop.", ephemeral=True)
+
+
+@tree.command(name="inventory", description="These are priceless!")
+async def inv(interaction: discord.Interaction):
+    authorid = str(interaction.user.id)
+
+    # Check if the user has any items in storage
+    if not storage.exists(authorid):
+        await interaction.channel.send("You don't have any items yet!")
+        return
+
+    user_data = storage.get(authorid)  # Retrieve user data
+    inventory_message = "**Your Inventory:**\n\n"
+
+    # Helper async function to format item entries
+    async def format_item(item):
+        if isinstance(item, tuple):
+            return f"- {item[0]} (Multiplier: {await toPercent(item[1])})"
+        return f"- {item}"
+
+    # Iterate through user categories and items
+    for category, items in user_data.items():
+        inventory_message += f"**{category.capitalize()}**\n"
+        formatted_items = await asyncio.gather(*(format_item(item) for item in items))  # Use asyncio.gather for concurrency
+        inventory_message += "\n".join(formatted_items) + "\n\n"
+
+    await interaction.channel.send(embed=await embed_make(
+        f"{interaction.user.name}'s Inventory",
+        inventory_message,
+        discord.Color.green()
+    ))
 
 
 
@@ -197,6 +270,7 @@ async def rock_status(interaction: discord.Interaction):
     else:
         hasPet.ladd('hasPet', interaction.user.id)
         stats.dcreate(str(interaction.user.id))
+        storage.dcreate(str(interaction.user.id))
         stats.dadd(str(interaction.user.id), ("last_daily_claim", 0))
         stats.dadd(str(interaction.user.id), ("level", 1))
         stats.dadd(str(interaction.user.id), ("hp", 100))
