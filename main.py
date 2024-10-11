@@ -22,6 +22,7 @@ client = discord.Client(command_prefix=',', intents=intents)
 tree = app_commands.CommandTree(client)
 hasPet = pickledb.load('rock', True)
 stats = pickledb.load('stats', True)
+storage = pickledb.load('storage', True)
 
 async def embed_make(title, description, color):
     return_this = discord.Embed(description=description, colour= color, title=title)
@@ -143,6 +144,46 @@ async def roulette(interaction: discord.Interaction, choice: black_red, bet: int
     else:
         await interaction.channel.send(embed=await embed_make(f'Not enough pebbles!', f'You need more pebbles to gamble!', discord.Color.red()))
 
+
+shop_items = {
+    "multipliers": [
+        {"name": "Quartz", "price": 3000, "description": "Increase pebble gain by 10%", "boost": 1.1}
+    ],
+
+    "companions": [
+        {"name": "Bato", "price": 500, "description": "Gives you idk"}
+    ],
+
+    "cosmetics": [
+        {"name": "Tophat", "price": 1000, "description": "I look very classy!"}
+    ]
+}
+
+@tree.command(name="shop", description="can i buy this?")
+async def view(interaction: discord.Interaction):
+    embed = discord.Embed(title="Miner David's Shop", description="Take a look inside!", color=discord.Color.green())
+
+    for category, items in shop_items.items():
+        item_list = ""
+        for item in items:
+            item_list += f"**{item['name']}** - {item['price']} pebbles\n*{item['description']}*\n\n"
+
+        embed.add_field(name=category.capitalize(), value=item_list, inline=False)
+
+    await interaction.channel.send(embed=embed)
+
+@tree.command(name="buy", description="let's go buying!")
+async def buy(interaction: discord.Interaction, item: str):
+    authorid = interaction.user.id
+    for category, items in shop_items.items():
+        for inItem in items:
+            if item.lower() == inItem["name"].lower():
+                if category == "multipliers":
+                    print(storage.dadd(str(authorid), ("multipliers", (str(inItem["name"], int(inItem["boost"]))))))
+                await interaction.channel.send(embed = await embed_make(f"{interaction.user.name} bought {inItem["name"]}", f"*{inItem["description"]}*", discord.Color.green()))
+
+
+
 @tree.command(name="rock-status", description="take a look at the status of your pet rock!")
 async def rock_status(interaction: discord.Interaction):
     list_users = hasPet.lgetall('hasPet')
@@ -162,6 +203,9 @@ async def rock_status(interaction: discord.Interaction):
         stats.dadd(str(interaction.user.id), ("XP", 1))
         stats.dadd(str(interaction.user.id), ("pebbles", 0))
         stats.dadd(str(interaction.user.id), ("multiplier", [1.5,1.5,1.5,1.5,1.5]))
+        storage.dadd(str(interaction.user.id), ("multipliers", {}))
+        storage.dadd(str(interaction.user.id), ("utilities", []))
+        storage.dadd(str(interaction.user.id), ("companions", []))
         print(stats.dget(str(interaction.user.id), "level"))
         print(stats.dget(str(interaction.user.id), "hp"))
         print(stats.dget(str(interaction.user.id), "XP"))
