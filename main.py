@@ -2,6 +2,8 @@ import enum
 from math import trunc
 import math
 import time
+from operator import truediv
+
 import discord
 from Cryptodome.SelfTest.Hash.test_cSHAKE import descr
 from Cryptodome.Util.number import ceil_div
@@ -24,6 +26,16 @@ hasPet = pickledb.load('rock', True)
 stats = pickledb.load('stats', True)
 storage = pickledb.load('storage', True)
 
+async def checkEnoughMoney(id, itemCost):
+    user_money = stats.dget(str(id), "pebbles")
+
+    if user_money >= itemCost:
+        new_money = (user_money - itemCost)
+        stats.dadd(str(id), ("pebbles", new_money))
+        return True
+    else:
+        return False
+
 async def embed_make(title, description, color):
     return_this = discord.Embed(description=description, colour= color, title=title)
     return return_this
@@ -45,6 +57,27 @@ async def multiplierCalculator(ID, reward):
 
 async def toPercent(multiplier):
     return  (multiplier - 1) * 100
+
+async def randomCompanionCheck(id, interaction):
+    authorid = str(id)
+    rand = random.randrange(1, 15)
+    companions_list = storage.dget(authorid, "companions")
+
+    if companions_list:
+        pass
+    else:
+        return
+    for name, boost in companions_list:
+        if rand == 1:
+            lvl = stats.dget(authorid, "lvl")
+            lvl_formula = (lvl/5) * 1000
+            calculation = await multiplierCalculator(authorid, lvl_formula)
+            current_pebbles = stats.dget(authorid, "pebbles")
+            new_pebbles = current_pebbles + calculation
+
+            stats.dadd(authorid, ("pebbles", new_pebbles))
+            await interaction.channel.send(embed=discord.Embed(title="Working hard, Hardly Working",
+                description =f"**{name}** worked really hard and got **{calculation}** for you! Thank them now!!!"))
 
 @client.event
 async def on_ready():
@@ -70,7 +103,7 @@ async def returnStats(ID):
     rock_xp = stats.dget(str(ID), "XP")
     pebbles = stats.dget(str(ID), "pebbles")
 
-    return_this_nerd_lmao = (f'**Level**: {rock_level} \n**HP**: {rock_hp} \n**XP**:{rock_xp} \n**Pebbles**:{round(pebbles)}')
+    return_this_nerd_lmao = (f'**Level**: {rock_level} \n**HP**: {rock_hp} \n**XP**:{round(rock_xp)} \n**Pebbles**:{round(pebbles)}')
     return return_this_nerd_lmao
 
 @client.event
@@ -80,6 +113,7 @@ async def on_message(message: discord.Message):
     print(author_id)
 
     if message.author.id in hasPet.lgetall('hasPet'):
+        await randomCompanionCheck(author_id, message)
         current_xp = stats.dget(str(author_id), "XP")
         current_level = stats.dget(str(author_id), "level")
         current_pebbles = stats.dget(author_id, "pebbles")
@@ -131,8 +165,6 @@ async def checkmultiplier(interaction: discord.Interaction):
     for name, boost in userMultiplier:
         to_print += f"- **{name}**: {round(await toPercent(boost))}%"
 
-    ## total_multis = "\n".join([f"{i+1}. {round(await toPercent(value))}%" for i, value in enumerate(multiplier_values)])
-
     # Send the response as an embed
     await interaction.response.send_message(embed=await embed_make(
         f"{interaction.user.name}'s Multipliers",
@@ -156,7 +188,6 @@ async def daily(interaction: discord.Interaction):
             stats.dadd(str(interaction.user.id), ("pebbles", new_money))
             print("sent")
             stats.dadd(str(interaction.user.id), ("last_daily_claim", current_time))
-
             await interaction.channel.send(embed= await embed_make("Daily Claimed!",f'You now have **{round(new_money)}** pebbles!', discord.Color.green()))
         else:
             await interaction.channel.send(embed = await embed_make("Daily already claimed!", f'Please wait for your next claim!', discord.Color.red()))
@@ -193,14 +224,18 @@ async def roulette(interaction: discord.Interaction, choice: black_red, bet: int
 
 shop_items = {
     "multipliers": [
-        {"name": "Quartz", "price": 3000, "description": "Increase pebble gain by 10%", "boost": 1.1}
+        {"name": "Quartz", "price": 3000, "description": "Increase pebble gain by 10%", "boost": 1.1},
+        {"name": "Manganese", "price": 10000, "description": "Increase pebble gain by 10%", "boost": 1.1},
+        {"name": "Iron", "price": 25000, "description": "Increase pebble gain by 25%", "boost": 1.25},
+        {"name": "Diamond", "price": 50000, "description": "Increase pebble gain by 50%", "boost": 1.5},
+        {"name": "Amethyst", "price": 100000, "description": "Increase pebble gain by 75%", "boost": 1.75}
     ],
 
     "companions": [
-        {"name": "Bato", "price": 1000, "description": "Gives you idk"},
-        {"name": "The Rock", "price": 5000, "description": "I think this guy knows Kevin Hart!"},
-        {"name": "Rocky Road", "price": 20000, "description": "Ice cream or the road? Who knows?"},
-        {"name": "Rocky Balboa", "price": 100000, "description": "I'm in good terms with this guy!"}
+        {"name": "Bato", "price": 1000, "description": "Gives you idk", "boost": 1.1},
+        {"name": "The Rock", "price": 5000, "description": "I think this guy knows Kevin Hart!", "boost": 1.1},
+        {"name": "Rocky Road", "price": 20000, "description": "Ice cream or the road? Who knows?", "boost": 1.2},
+        {"name": "Rocky Balboa", "price": 100000, "description": "I'm in good terms with this guy!", "boost": 1.5}
     ],
 
     "cosmetics": [
@@ -253,6 +288,11 @@ async def buy(interaction: discord.Interaction, item: str):
             if item.lower() == inItem["name"].lower():
                 # Retrieve current items for the category from storage, or initialize an empty list
                 current_items = storage.dget(authorid, category) or []
+                if await checkEnoughMoney(authorid, inItem["price"]):
+                    pass
+                else:
+                    await interaction.response.send_message(f"You don't have enough pebbles!", ephemeral=True)
+                    return
 
                 # Handle multipliers category
                 if category == "multipliers":
@@ -263,15 +303,13 @@ async def buy(interaction: discord.Interaction, item: str):
                     else:
                         current_items.append((inItem["name"], inItem["boost"]))
 
-
                 # Handle companions category
                 elif category == "companions" or category == "cosmetics":
                     if inItem["name"] in current_items:
                         await interaction.response.send_message(f"You already own the companion **{inItem['name']}**!", ephemeral=True)
                         return
                     else:
-                        current_items.append(inItem["name"])
-
+                        current_items.append((inItem["name"], inItem["boost"]))
                 else:
                     # Invalid category, return error
                     await interaction.response.send_message("This item does not exist.", ephemeral=True)
