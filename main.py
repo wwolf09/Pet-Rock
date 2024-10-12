@@ -30,18 +30,21 @@ async def embed_make(title, description, color):
 
 async def multiplierCalculator(ID, reward):
     userMultiplier = storage.dget(str(ID), "multipliers")
-    multiplier_values = [item[1] for item in userMultiplier if isinstance(item, tuple)]
-
-    finalreward = round(reward)
-
-    for num in multiplier_values:
+    print(f'{userMultiplier} : brother')
+    # List comprehension with filtering
+    boost = []
+    for item in userMultiplier:
+        boost.append(item[1])
+    ##initialize stuff lol
+    finalreward = reward
+    ## multiply values
+    for num in boost:
         finalreward *= num
 
     return finalreward
 
 async def toPercent(multiplier):
-    return (multiplier - 1) * 100
-
+    return  (multiplier - 1) * 100
 
 @client.event
 async def on_ready():
@@ -55,7 +58,7 @@ async def on_ready():
 
 async def returnstatus(id):
     name = await client.fetch_user(id)
-    return_this = discord.Embed(description= await returnStats(id),colour=discord.Color.blue(), title=((f'{name} The Rock')))
+    return_this = discord.Embed(description= await returnStats(id),colour=discord.Color.blue(),title=((f'{name} The Rock')))
     return_this.set_image(url="https://media.discordapp.net/attachments/769117147653210133/1291718080212369499/rock-vector-icon-on-white-background-rock-emoji-illustration-isolated-rock-stone-vector.png?ex=67011db5&is=66ffcc35&hm=c3ca212cb8b489556d258b4ea176325a7c9efef5e6932e0e1b57f71e511e5d87&=&format=webp&quality=lossless")
     return return_this
 
@@ -66,12 +69,8 @@ async def returnStats(ID):
     print(stats.dexists(str(ID), "XP"))
     rock_xp = stats.dget(str(ID), "XP")
     pebbles = stats.dget(str(ID), "pebbles")
-    multiplier = stats.dget(str(ID), "multiplier")
 
-    total_multi = math.prod(multiplier)
-
-    return_this_nerd_lmao = (f'**Level**: {rock_level} \n**HP**: {rock_hp} \n**XP**:{rock_xp} \n**Pebbles**:{pebbles} '
-                             f'\n**Total Multiplier:**{total_multi}')
+    return_this_nerd_lmao = (f'**Level**: {rock_level} \n**HP**: {rock_hp} \n**XP**:{rock_xp} \n**Pebbles**:{round(pebbles)}')
     return return_this_nerd_lmao
 
 @client.event
@@ -106,6 +105,40 @@ async def challenge(interaction: discord.Interaction, member: discord.Member, xp
     challenger = interaction.user.name
     to_be_challenged = member.name
     await interaction.channel.send(embed= await embed_make("Challenger Approaches!", f"{challenger} challenges {to_be_challenged} for {xp}xp!",discord.Color.red() ))
+
+@tree.command(name="multiplier", description="Checks which multipliers you have")
+async def checkmultiplier(interaction: discord.Interaction):
+    ID = str(interaction.user.id)
+
+    # Safely retrieve multipliers or set to an empty list if not found
+    userMultiplier = storage.dget(ID, "multipliers")
+
+    multiplier_values = []
+
+    for item in userMultiplier:
+        multiplier_values.append(item[1])
+
+    # Handle the case where no multipliers exist
+    if not multiplier_values:
+        await interaction.response.send_message(
+            f"{interaction.user.name}, you don't have any multipliers yet.",
+            ephemeral=True
+        )
+        return
+
+    # Format the multiplier list for display
+    to_print = ""
+    for name, boost in userMultiplier:
+        to_print += f"- **{name}**: {round(await toPercent(boost))}%"
+
+    ## total_multis = "\n".join([f"{i+1}. {round(await toPercent(value))}%" for i, value in enumerate(multiplier_values)])
+
+    # Send the response as an embed
+    await interaction.response.send_message(embed=await embed_make(
+        f"{interaction.user.name}'s Multipliers",
+        to_print,
+        discord.Color.green()
+    ))
 
 @tree.command(name="daily", description="daily rewards to be claimed")
 async def daily(interaction: discord.Interaction):
@@ -184,26 +217,30 @@ async def view(interaction: discord.Interaction):
         "cosmetics": discord.Color.gold(),
     }
 
+    embeds = []  # Collect all embeds here
+
     # Loop through categories and create individual embeds
     for category, items in shop_items.items():
         embed_color = category_colors.get(category.lower(), discord.Color.green())  # Default to green if not found
 
         embed = discord.Embed(
-            title=f"{category.capitalize()} - Miner David's Shop",
-            description="Take a look inside!",
+            title=f"{category.capitalize()}",
             color=embed_color
         )
 
-        # Add items to the embed
+        # Add items with prettified prices to the embed
         for item in items:
+            price = f"🪨 {item['price']:,.0f} pebbles"  # Adds emoji and comma separators
             embed.add_field(
-                name=f"**{item['name']}** - {item['price']} pebbles",
+                name=f"**{item['name']}** \n— {price}",
                 value=f"*{item['description']}*",
-                inline=False
+                inline=True
             )
 
-        # Send each category embed individually
-        await interaction.channel.send(embed=embed)
+        embeds.append(embed)  # Add embed to the list
+
+    # Send all embeds in one message
+    await interaction.response.send_message(embeds=embeds)
 
 
 @tree.command(name="buy", description="Let's go buying!")
@@ -228,7 +265,7 @@ async def buy(interaction: discord.Interaction, item: str):
 
 
                 # Handle companions category
-                elif category == "companions":
+                elif category == "companions" or category == "cosmetics":
                     if inItem["name"] in current_items:
                         await interaction.response.send_message(f"You already own the companion **{inItem['name']}**!", ephemeral=True)
                         return
@@ -286,8 +323,6 @@ async def inv(interaction: discord.Interaction):
         discord.Color.green()
     ))
 
-
-
 @tree.command(name="rock-status", description="take a look at the status of your pet rock!")
 async def rock_status(interaction: discord.Interaction):
     list_users = hasPet.lgetall('hasPet')
@@ -305,11 +340,10 @@ async def rock_status(interaction: discord.Interaction):
         stats.dadd(str(interaction.user.id), ("last_daily_claim", 0))
         stats.dadd(str(interaction.user.id), ("level", 1))
         stats.dadd(str(interaction.user.id), ("hp", 100))
-        stats.dadd(str(interaction.user.id), ("XP", 1))
+        stats.dadd(str(interaction.user.id), ("XP", 0))
         stats.dadd(str(interaction.user.id), ("pebbles", 0))
-        stats.dadd(str(interaction.user.id), ("multiplier", [1.5,1.5,1.5,1.5,1.5]))
         storage.dadd(str(interaction.user.id), ("multipliers", {}))
-        storage.dadd(str(interaction.user.id), ("utilities", []))
+        storage.dadd(str(interaction.user.id), ("cosmetics", []))
         storage.dadd(str(interaction.user.id), ("companions", []))
         print(stats.dget(str(interaction.user.id), "level"))
         print(stats.dget(str(interaction.user.id), "hp"))
