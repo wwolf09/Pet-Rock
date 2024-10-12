@@ -29,11 +29,12 @@ async def embed_make(title, description, color):
     return return_this
 
 async def multiplierCalculator(ID, reward):
-    userMultiplier = stats.dget(str(ID), "multiplier")
+    userMultiplier = storage.dget(str(ID), "multipliers")
+    multiplier_values = [item[1] for item in userMultiplier if isinstance(item, tuple)]
 
     finalreward = round(reward)
 
-    for num in userMultiplier:
+    for num in multiplier_values:
         finalreward *= num
 
     return finalreward
@@ -118,12 +119,12 @@ async def daily(interaction: discord.Interaction):
         print(last_claim)
         if current_time - last_claim >= 86400:
             print("true")
-            new_money = money + 100 * (stats.dget(str(author_id), "level") / 2)
+            new_money = money + 100 * (stats.dget(str(author_id), "level") / 1.1)
             stats.dadd(str(interaction.user.id), ("pebbles", new_money))
             print("sent")
             stats.dadd(str(interaction.user.id), ("last_daily_claim", current_time))
 
-            await interaction.channel.send(embed= await embed_make("Daily Claimed!",f'You have gained your **{new_money}** pebbles!', discord.Color.green()))
+            await interaction.channel.send(embed= await embed_make("Daily Claimed!",f'You now have **{round(new_money)}** pebbles!', discord.Color.green()))
         else:
             await interaction.channel.send(embed = await embed_make("Daily already claimed!", f'Please wait for your next claim!', discord.Color.red()))
 
@@ -163,7 +164,10 @@ shop_items = {
     ],
 
     "companions": [
-        {"name": "Bato", "price": 500, "description": "Gives you idk"}
+        {"name": "Bato", "price": 1000, "description": "Gives you idk"},
+        {"name": "The Rock", "price": 5000, "description": "I think this guy knows Kevin Hart!"},
+        {"name": "Rocky Road", "price": 20000, "description": "Ice cream or the road? Who knows?"},
+        {"name": "Rocky Balboa", "price": 100000, "description": "I'm in good terms with this guy!"}
     ],
 
     "cosmetics": [
@@ -171,18 +175,35 @@ shop_items = {
     ]
 }
 
-@tree.command(name="shop", description="can i buy this?")
+@tree.command(name="shop", description="Can I buy this?")
 async def view(interaction: discord.Interaction):
-    embed = discord.Embed(title="Miner David's Shop", description="Take a look inside!", color=discord.Color.green())
+    # Define colors for each category
+    category_colors = {
+        "multipliers": discord.Color.blue(),
+        "companions": discord.Color.purple(),
+        "cosmetics": discord.Color.gold(),
+    }
 
+    # Loop through categories and create individual embeds
     for category, items in shop_items.items():
-        item_list = ""
+        embed_color = category_colors.get(category.lower(), discord.Color.green())  # Default to green if not found
+
+        embed = discord.Embed(
+            title=f"{category.capitalize()} - Miner David's Shop",
+            description="Take a look inside!",
+            color=embed_color
+        )
+
+        # Add items to the embed
         for item in items:
-            item_list += f"**{item['name']}** - {item['price']} pebbles\n*{item['description']}*\n\n"
+            embed.add_field(
+                name=f"**{item['name']}** - {item['price']} pebbles",
+                value=f"*{item['description']}*",
+                inline=False
+            )
 
-        embed.add_field(name=category.capitalize(), value=item_list, inline=False)
-
-    await interaction.channel.send(embed=embed)
+        # Send each category embed individually
+        await interaction.channel.send(embed=embed)
 
 
 @tree.command(name="buy", description="Let's go buying!")
