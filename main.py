@@ -41,6 +41,7 @@ async def multiplierCalculator(ID, reward):
 async def toPercent(multiplier):
     return (multiplier - 1) * 100
 
+
 @client.event
 async def on_ready():
     await tree.sync()
@@ -68,7 +69,8 @@ async def returnStats(ID):
 
     total_multi = math.prod(multiplier)
 
-    return_this_nerd_lmao = f'**Level**: {rock_level} \n**HP**: {rock_hp} \n**XP**:{rock_xp} \n**Pebbles**:{pebbles} \n**Total Multiplier:**{total_multi}'
+    return_this_nerd_lmao = (f'**Level**: {rock_level} \n**HP**: {rock_hp} \n**XP**:{rock_xp} \n**Pebbles**:{pebbles} '
+                             f'\n**Total Multiplier:**{total_multi}')
     return return_this_nerd_lmao
 
 @client.event
@@ -80,6 +82,7 @@ async def on_message(message: discord.Message):
     if message.author.id in hasPet.lgetall('hasPet'):
         current_xp = stats.dget(str(author_id), "XP")
         current_level = stats.dget(str(author_id), "level")
+        current_pebbles = stats.dget(author_id, "pebbles")
         required_next_xp = 100 * (current_level/2)
 
         newxp = current_xp + await multiplierCalculator(author_id, 3)
@@ -88,9 +91,14 @@ async def on_message(message: discord.Message):
         print(stats.dget(str(author_id),"XP"))
 
         if newxp >= required_next_xp:
+            reward_pebbles = 1000 * (current_level/2)
+            reward = await multiplierCalculator(author_id, reward_pebbles)
             stats.dadd(author_id, ("level", (current_level + 1)))
+            stats.dadd(author_id, ("pebbles", (current_pebbles + reward)))
             new_level = stats.dget(str(author_id), "level")
+
             await message.channel.send(content=f'**{author_name} The Rock** has leveled up to lvl {new_level}!')
+            await message.channel.send(content=f'**{author_name} The Rock** received {reward} pebbles! (multiplier included)')
 
 @tree.command(name="challenge", description="challenge someone with rock paper scissors to steal their hp and xp!")
 async def challenge(interaction: discord.Interaction, member: discord.Member, xp: int):
@@ -185,35 +193,36 @@ async def buy(interaction: discord.Interaction, item: str):
     for category, items in shop_items.items():
         for inItem in items:
             if item.lower() == inItem["name"].lower():
+                # Retrieve current items for the category from storage, or initialize an empty list
                 current_items = storage.dget(authorid, category) or []
 
-                # Check if the item already exists in the user's inventory
+                # Handle multipliers category
                 if category == "multipliers":
-                    # Check for existing multipliers
+                    # Check if the user already owns the multiplier
                     if any(existing_item[0] == inItem["name"] for existing_item in current_items):
-                        await interaction.response.send_message(f"You already own the multiplier **{inItem['name']}**!",
-                                                                ephemeral=True)
+                        await interaction.response.send_message(f"You already own the multiplier **{inItem['name']}**!", ephemeral=True)
                         return
                     else:
-                        # Add new multiplier
                         current_items.append((inItem["name"], inItem["boost"]))
+
+
+                # Handle companions category
                 elif category == "companions":
-                    # Check for existing companions
                     if inItem["name"] in current_items:
-                        await interaction.response.send_message(f"You already own the companion **{inItem['name']}**!",
-                                                                ephemeral=True)
+                        await interaction.response.send_message(f"You already own the companion **{inItem['name']}**!", ephemeral=True)
                         return
                     else:
-                        # Add new companion
                         current_items.append(inItem["name"])
+
                 else:
-                    # If the category is not recognized
-                    await interaction.response.send_message("This category is not valid.", ephemeral=True)
+                    # Invalid category, return error
+                    await interaction.response.send_message("This item does not exist.", ephemeral=True)
                     return
 
-                # Store the updated inventory
+                # Update the user's inventory in storage
                 storage.dadd(authorid, (category, current_items))
 
+                # Send confirmation message
                 await interaction.response.send_message(embed=await embed_make(
                     f"{interaction.user.name} bought {inItem['name']}",
                     f"*{inItem['description']}*",
@@ -235,12 +244,13 @@ async def inv(interaction: discord.Interaction):
         return
 
     user_data = storage.get(authorid)  # Retrieve user data
-    inventory_message = "**Your Inventory:**\n\n"
+    inventory_message = ""
 
     # Helper async function to format item entries
     async def format_item(item):
         if isinstance(item, tuple):
-            return f"- {item[0]} (Multiplier: {await toPercent(item[1])})"
+            calculated = math.floor(await toPercent(item[1]))
+            return f"- {item[0]} (Multiplier: {calculated}%)"
         return f"- {item}"
 
     # Iterate through user categories and items
