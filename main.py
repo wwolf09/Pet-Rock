@@ -60,7 +60,6 @@ async def toPercent(multiplier):
 
 async def randomCompanionCheck(id, interaction):
     authorid = str(id)
-    rand = random.randrange(1, 15)
     companions_list = storage.dget(authorid, "companions")
 
     if companions_list:
@@ -68,16 +67,17 @@ async def randomCompanionCheck(id, interaction):
     else:
         return
     for name, boost in companions_list:
+        rand = random.randrange(1, 15)
         if rand == 1:
-            lvl = stats.dget(authorid, "lvl")
+            lvl = stats.dget(authorid, "level")
             lvl_formula = (lvl/5) * 1000
             calculation = await multiplierCalculator(authorid, lvl_formula)
             current_pebbles = stats.dget(authorid, "pebbles")
-            new_pebbles = current_pebbles + calculation
+            new_pebbles = round(current_pebbles + calculation)
 
             stats.dadd(authorid, ("pebbles", new_pebbles))
             await interaction.channel.send(embed=discord.Embed(title="Working hard, Hardly Working",
-                description =f"**{name}** worked really hard and got **{calculation}** for you! Thank them now!!!"))
+                description =f"**{name} ({interaction.author.name}'s companion)** worked really hard and got **{round(calculation)}** for you! Thank them now!!!", color = discord.Color.green()))
 
 @client.event
 async def on_ready():
@@ -112,6 +112,7 @@ async def on_message(message: discord.Message):
     author_name = str(message.author.name)
     print(author_id)
 
+
     if message.author.id in hasPet.lgetall('hasPet'):
         await randomCompanionCheck(author_id, message)
         current_xp = stats.dget(str(author_id), "XP")
@@ -132,13 +133,13 @@ async def on_message(message: discord.Message):
             new_level = stats.dget(str(author_id), "level")
 
             await message.channel.send(content=f'**{author_name} The Rock** has leveled up to lvl {new_level}!')
-            await message.channel.send(content=f'**{author_name} The Rock** received {reward} pebbles! (multiplier included)')
+            await message.channel.send(content=f'**{author_name} The Rock** received {round(reward)} pebbles! (multiplier included)')
 
 @tree.command(name="challenge", description="challenge someone with rock paper scissors to steal their hp and xp!")
 async def challenge(interaction: discord.Interaction, member: discord.Member, xp: int):
     challenger = interaction.user.name
     to_be_challenged = member.name
-    await interaction.channel.send(embed= await embed_make("Challenger Approaches!", f"{challenger} challenges {to_be_challenged} for {xp}xp!",discord.Color.red() ))
+    await interaction.response.send_message(embed= await embed_make("Challenger Approaches!", f"{challenger} challenges {to_be_challenged} for {xp}xp!",discord.Color.red() ))
 
 @tree.command(name="multiplier", description="Checks which multipliers you have")
 async def checkmultiplier(interaction: discord.Interaction):
@@ -163,7 +164,7 @@ async def checkmultiplier(interaction: discord.Interaction):
     # Format the multiplier list for display
     to_print = ""
     for name, boost in userMultiplier:
-        to_print += f"- **{name}**: {round(await toPercent(boost))}%"
+        to_print += f"\n- **{name}**: {round(await toPercent(boost))}%"
 
     # Send the response as an embed
     await interaction.response.send_message(embed=await embed_make(
@@ -171,6 +172,20 @@ async def checkmultiplier(interaction: discord.Interaction):
         to_print,
         discord.Color.green()
     ))
+
+@tree.command(name="add", description = "gantimpala.tameimpala")
+async def add(interaction: discord.Interaction, member: discord.Member, pebble: int):
+    if interaction.user.id == 718445888821002271:
+        pass
+    else:
+        return
+
+    user_id = member.id
+    user_name = member.name
+
+    current = stats.dget(str(user_id), "pebbles")
+    new_money = pebble
+    stats.dadd(str(user_id), ("pebbles", new_money))
 
 @tree.command(name="daily", description="daily rewards to be claimed")
 async def daily(interaction: discord.Interaction):
@@ -188,9 +203,9 @@ async def daily(interaction: discord.Interaction):
             stats.dadd(str(interaction.user.id), ("pebbles", new_money))
             print("sent")
             stats.dadd(str(interaction.user.id), ("last_daily_claim", current_time))
-            await interaction.channel.send(embed= await embed_make("Daily Claimed!",f'You now have **{round(new_money)}** pebbles!', discord.Color.green()))
+            await interaction.response.send_message(embed= await embed_make("Daily Claimed!",f'You now have **{round(new_money)}** pebbles!', discord.Color.green()))
         else:
-            await interaction.channel.send(embed = await embed_make("Daily already claimed!", f'Please wait for your next claim!', discord.Color.red()))
+            await interaction.response.send_message(embed = await embed_make("Daily already claimed!", f'Please wait for your next claim!', discord.Color.red()))
 
 class black_red(enum.Enum):
     black = "black"
@@ -205,21 +220,25 @@ async def roulette(interaction: discord.Interaction, choice: black_red, bet: int
 
     User_Money = stats.dget(str(interaction.user.id), "pebbles")
 
+    if 0 > bet:
+        await interaction.response.send_message(content= "really?", ephemeral = True)
+        return
+
     if User_Money > bet or User_Money == bet:
         if rand == "red" and choice == black_red.red or rand == "black" and choice == black_red.black:
             current_money = stats.dget(str(interaction.user.id), "pebbles")
             new_money = current_money + (await multiplierCalculator(str(interaction.user.id), (bet*2)))
             stats.dadd(str(interaction.user.id), ("pebbles", new_money))
-            await interaction.channel.send(embed=await embed_make(f"Let's go gambling!", f'Received **{(await multiplierCalculator(str(interaction.user.id), (bet*2)))} pebbles!**', discord.Color.green()))
+            await interaction.response.send_message(embed=await embed_make(f"Let's go gambling!", f'Received **{(await multiplierCalculator(str(interaction.user.id), (bet*2)))} pebbles!**', discord.Color.green()))
             print("gambling succeed")
         else:
             current_money = stats.dget(str(interaction.user.id), "pebbles")
             new_money = current_money - bet
             stats.dadd(str(interaction.user.id), ("pebbles", (new_money)))
             print("gambling failed")
-            await interaction.channel.send(embed=await embed_make(f'Aw dang it!', f'Gambling failed. You lost **{bet} pebbles.**',discord.Color.red()))
+            await interaction.response.send_message(embed=await embed_make(f'Aw dang it!', f'Gambling failed. You lost **{bet} pebbles.**',discord.Color.red()))
     else:
-        await interaction.channel.send(embed=await embed_make(f'Not enough pebbles!', f'You need more pebbles to gamble!', discord.Color.red()))
+        await interaction.response.send_message(embed=await embed_make(f'Not enough pebbles!', f'You need more pebbles to gamble!', discord.Color.red()))
 
 
 shop_items = {
@@ -232,14 +251,15 @@ shop_items = {
     ],
 
     "companions": [
-        {"name": "Bato", "price": 1000, "description": "Gives you idk", "boost": 1.1},
-        {"name": "The Rock", "price": 5000, "description": "I think this guy knows Kevin Hart!", "boost": 1.1},
-        {"name": "Rocky Road", "price": 20000, "description": "Ice cream or the road? Who knows?", "boost": 1.2},
-        {"name": "Rocky Balboa", "price": 100000, "description": "I'm in good terms with this guy!", "boost": 1.5}
+        {"name": "Bato", "price": 10000, "description": "Please do not let this guy run senate.", "boost": 1.1},
+        {"name": "The Rock", "price": 50000, "description": "I think this guy knows Kevin Hart!", "boost": 1.1},
+        {"name": "Rocky Road", "price": 200000, "description": "Ice cream or the road? Who knows?", "boost": 1.2},
+        {"name": "Rocky Balboa", "price": 1000000, "description": "I'm in good terms with this guy!", "boost": 1.5}
     ],
 
     "cosmetics": [
-        {"name": "Tophat", "price": 1000, "description": "I look very classy!"}
+        {"name": "Tophat", "price": 1000, "description": "I look very classy!"},
+        {"name": "Uranium Necklace", "price": 1000000000, "description": "Does this explode?"}
     ]
 }
 
@@ -286,36 +306,40 @@ async def buy(interaction: discord.Interaction, item: str):
     for category, items in shop_items.items():
         for inItem in items:
             if item.lower() == inItem["name"].lower():
-                # Retrieve current items for the category from storage, or initialize an empty list
+                # Retrieve or initialize the current items as a list
                 current_items = storage.dget(authorid, category) or []
-                if await checkEnoughMoney(authorid, inItem["price"]):
-                    pass
-                else:
-                    await interaction.response.send_message(f"You don't have enough pebbles!", ephemeral=True)
+
+                # Ensure the retrieved data is a list
+                if not isinstance(current_items, list):
+                    current_items = list(current_items)
+
+                # Check if the user has enough money
+                if not await checkEnoughMoney(authorid, inItem["price"]):
+                    await interaction.response.send_message("You don't have enough pebbles!", ephemeral=True)
                     return
 
-                # Handle multipliers category
+                # Handle the "multipliers" category
                 if category == "multipliers":
-                    # Check if the user already owns the multiplier
                     if any(existing_item[0] == inItem["name"] for existing_item in current_items):
-                        await interaction.response.send_message(f"You already own the multiplier **{inItem['name']}**!", ephemeral=True)
+                        await interaction.response.send_message(f"You already own the multiplier **{inItem['name']}**!",
+                                                                ephemeral=True)
                         return
-                    else:
-                        current_items.append((inItem["name"], inItem["boost"]))
+                    current_items.append((inItem["name"], inItem["boost"]))
 
-                # Handle companions category
-                elif category == "companions" or category == "cosmetics":
-                    if inItem["name"] in current_items:
-                        await interaction.response.send_message(f"You already own the companion **{inItem['name']}**!", ephemeral=True)
+                # Handle the "companions" or "cosmetics" category
+                elif category in ["companions", "cosmetics"]:
+                    if any(existing_item[0] == inItem["name"] for existing_item in current_items):
+                        await interaction.response.send_message(f"You already own the companion **{inItem['name']}**!",
+                                                                ephemeral=True)
                         return
-                    else:
-                        current_items.append((inItem["name"], inItem["boost"]))
+                    current_items.append((inItem["name"], inItem.get("boost")))
+
+                # Handle invalid categories
                 else:
-                    # Invalid category, return error
                     await interaction.response.send_message("This item does not exist.", ephemeral=True)
                     return
 
-                # Update the user's inventory in storage
+                # Update the user's inventory
                 storage.dadd(authorid, (category, current_items))
 
                 # Send confirmation message
@@ -344,6 +368,10 @@ async def inv(interaction: discord.Interaction):
 
     # Helper async function to format item entries
     async def format_item(item):
+        # Ensure lists are converted to tuples
+        if isinstance(item, list):
+            item = tuple(item)
+
         if isinstance(item, tuple):
             calculated = math.floor(await toPercent(item[1]))
             return f"- {item[0]} (Multiplier: {calculated}%)"
@@ -352,7 +380,8 @@ async def inv(interaction: discord.Interaction):
     # Iterate through user categories and items
     for category, items in user_data.items():
         inventory_message += f"**{category.capitalize()}**\n"
-        formatted_items = await asyncio.gather(*(format_item(item) for item in items))  # Use asyncio.gather for concurrency
+        # Convert any list to a tuple during formatting
+        formatted_items = await asyncio.gather(*(format_item(item) for item in items))
         inventory_message += "\n".join(formatted_items) + "\n\n"
 
     await interaction.channel.send(embed=await embed_make(
@@ -361,13 +390,14 @@ async def inv(interaction: discord.Interaction):
         discord.Color.green()
     ))
 
+
 @tree.command(name="rock-status", description="take a look at the status of your pet rock!")
 async def rock_status(interaction: discord.Interaction):
     list_users = hasPet.lgetall('hasPet')
     print(list_users)
     if interaction.user.id in list_users:
         # Send Status
-        await interaction.channel.send(embed= await returnstatus(interaction.user.id))
+        await interaction.response.send_message(embed= await returnstatus(interaction.user.id))
         print(stats.dget(str(interaction.user.id), "level"))
         print(stats.dget(str(interaction.user.id), "hp"))
         print(stats.dget(str(interaction.user.id), "XP"))
