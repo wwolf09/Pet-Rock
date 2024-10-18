@@ -15,16 +15,19 @@ from datetime import datetime
 import pytz
 import pickledb
 import asyncio
+import pathlib
 
 # Initialize the Discord client
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
-client = discord.Client(command_prefix=',', intents=intents)
-tree = app_commands.CommandTree(client)
+client = commands.Bot(command_prefix=',', intents=intents)
+
 hasPet = pickledb.load('rock', True)
 stats = pickledb.load('stats', True)
 storage = pickledb.load('storage', True)
+
+cogs_dir = pathlib.Path(__file__).parent / "cogs"
 
 async def checkEnoughMoney(id, itemCost):
     user_money = stats.dget(str(id), "pebbles")
@@ -58,6 +61,24 @@ async def multiplierCalculator(ID, reward):
 async def toPercent(multiplier):
     return  (multiplier - 1) * 100
 
+async def companionMultiplier(ID):
+    authorid = str(ID)
+    print(authorid)
+    companions_list = storage.dget(authorid, "companions")
+
+    if companions_list:
+        pass
+    else:
+        return
+    multiplier = 1.00
+
+    for companion, boost, th1, th2 in companions_list:
+        multiplier += 0.050
+
+    print(f"Total Multiplier: {multiplier}")
+    return multiplier
+
+
 async def randomCompanionCheck(id, interaction):
     authorid = str(id)
     companions_list = storage.dget(authorid, "companions")
@@ -66,28 +87,34 @@ async def randomCompanionCheck(id, interaction):
         pass
     else:
         return
-    for name, boost in companions_list:
-        rand = random.randrange(1, 15)
+    for name, boost, th1, th2 in companions_list:
+        rand = random.randrange(1, 100)
         if rand == 1:
             lvl = stats.dget(authorid, "level")
-            lvl_formula = (lvl/5) * 1000
-            calculation = await multiplierCalculator(authorid, lvl_formula)
+            print(th1, th2)
+            defaultReward = random.randrange(th1, th2)
+            calculation = await companionMultiplier(authorid)
+            newReward = (defaultReward * calculation)
             current_pebbles = stats.dget(authorid, "pebbles")
-            new_pebbles = round(current_pebbles + calculation)
+            new_pebbles = round(current_pebbles + newReward)
 
             stats.dadd(authorid, ("pebbles", new_pebbles))
             await interaction.channel.send(embed=discord.Embed(title="Working hard, Hardly Working",
-                description =f"**{name} ({interaction.author.name}'s companion)** worked really hard and got **{round(calculation)}** for you! Thank them now!!!", color = discord.Color.green()))
+                description =f"**{name} ({interaction.author.name}'s companion)** worked really hard and got **{round(newReward)} pebbles** for you! Thank them now!!!", color = discord.Color.green()))
 
 @client.event
 async def on_ready():
-    await tree.sync()
+    await client.tree.sync()
     print('Bot is ready.')
 
     if not hasPet.exists('hasPet'):
         hasPet.lcreate('hasPet')
         stats.dcreate('stats')
         storage.dcreate('storage')
+
+    for cog_file in cogs_dir.glob("*.py"):
+        if cog_file.name != "__init__.py":
+            await client.load_extension(f"cogs.{cog_file.stem}")
 
 async def returnstatus(id):
     name = await client.fetch_user(id)
@@ -108,10 +135,12 @@ async def returnStats(ID):
 
 @client.event
 async def on_message(message: discord.Message):
+    if message.author.id == 1291704309368750191:
+        return
     author_id = str(message.author.id)
     author_name = str(message.author.name)
     print(author_id)
-
+    await companionMultiplier(author_id)
 
     if message.author.id in hasPet.lgetall('hasPet'):
         await randomCompanionCheck(author_id, message)
@@ -135,13 +164,13 @@ async def on_message(message: discord.Message):
             await message.channel.send(content=f'**{author_name} The Rock** has leveled up to lvl {new_level}!')
             await message.channel.send(content=f'**{author_name} The Rock** received {round(reward)} pebbles! (multiplier included)')
 
-@tree.command(name="challenge", description="challenge someone with rock paper scissors to steal their hp and xp!")
+@client.tree.command(name="challenge", description="challenge someone with rock paper scissors to steal their hp and xp!")
 async def challenge(interaction: discord.Interaction, member: discord.Member, xp: int):
     challenger = interaction.user.name
     to_be_challenged = member.name
     await interaction.response.send_message(embed= await embed_make("Challenger Approaches!", f"{challenger} challenges {to_be_challenged} for {xp}xp!",discord.Color.red() ))
 
-@tree.command(name="multiplier", description="Checks which multipliers you have")
+@client.tree.command(name="multiplier", description="Checks which multipliers you have")
 async def checkmultiplier(interaction: discord.Interaction):
     ID = str(interaction.user.id)
 
@@ -173,7 +202,7 @@ async def checkmultiplier(interaction: discord.Interaction):
         discord.Color.green()
     ))
 
-@tree.command(name="add", description = "gantimpala.tameimpala")
+@client.tree.command(name="add", description = "gantimpala.tameimpala")
 async def add(interaction: discord.Interaction, member: discord.Member, pebble: int):
     if interaction.user.id == 718445888821002271:
         pass
@@ -187,7 +216,7 @@ async def add(interaction: discord.Interaction, member: discord.Member, pebble: 
     new_money = pebble
     stats.dadd(str(user_id), ("pebbles", new_money))
 
-@tree.command(name="daily", description="daily rewards to be claimed")
+@client.tree.command(name="daily", description="daily rewards to be claimed")
 async def daily(interaction: discord.Interaction):
     author_id = interaction.user.id
     current_time = int(time.time())
@@ -211,7 +240,7 @@ class black_red(enum.Enum):
     black = "black"
     red = "red"
 
-@tree.command(name="roulette", description = "let's go gambling!")
+@client.tree.command(name="roulette", description = "let's go gambling!")
 async def roulette(interaction: discord.Interaction, choice: black_red, bet: int):
     gamble = ["black", "red"]
     rand = random.choice(gamble)
@@ -219,6 +248,11 @@ async def roulette(interaction: discord.Interaction, choice: black_red, bet: int
     print(rand)
 
     User_Money = stats.dget(str(interaction.user.id), "pebbles")
+    if bet > int(User_Money * 0.15) or bet == 0:
+        pass
+    else:
+        await interaction.response.send_message(content = "Can't gamble **less than 15%** of your pebbles", ephemeral = True)
+        return
 
     if 0 > bet:
         await interaction.response.send_message(content= "really?", ephemeral = True)
@@ -251,10 +285,11 @@ shop_items = {
     ],
 
     "companions": [
-        {"name": "Bato", "price": 10000, "description": "Please do not let this guy run senate.", "boost": 1.1},
-        {"name": "The Rock", "price": 50000, "description": "I think this guy knows Kevin Hart!", "boost": 1.1},
-        {"name": "Rocky Road", "price": 200000, "description": "Ice cream or the road? Who knows?", "boost": 1.2},
-        {"name": "Rocky Balboa", "price": 1000000, "description": "I'm in good terms with this guy!", "boost": 1.5}
+        {"name": "Bato", "price": 10000, "description": "Please do not let this guy run senate.", "boost": 1.1, "threshold1": 250, "threshold2": 500},
+        {"name": "The Rock", "price": 50000, "description": "I think this guy knows Kevin Hart!", "boost": 1.1, "threshold1": 300, "threshold2": 600},
+        {"name": "Rocky Road", "price": 200000, "description": "Ice cream or the road? Who knows?", "boost": 1.2, "threshold1": 500, "threshold2": 1000},
+        {"name": "Rocky Balboa", "price": 1000000, "description": "I'm in good terms with this guy!", "boost": 1.5, "threshold1": 5000, "threshold2": 7500},
+        {"name": "Kuwumi", "price": 50000000, "description": "this name sounds familiar.", "boost": 1.7, "threshold1": 100000, "threshold2": 150000}
     ],
 
     "cosmetics": [
@@ -263,7 +298,7 @@ shop_items = {
     ]
 }
 
-@tree.command(name="shop", description="Can I buy this?")
+@client.tree.command(name="shop", description="Can I buy this?")
 async def view(interaction: discord.Interaction):
     # Define colors for each category
     category_colors = {
@@ -298,7 +333,7 @@ async def view(interaction: discord.Interaction):
     await interaction.response.send_message(embeds=embeds)
 
 
-@tree.command(name="buy", description="Let's go buying!")
+@client.tree.command(name="buy", description="Let's go buying!")
 async def buy(interaction: discord.Interaction, item: str):
     authorid = str(interaction.user.id)
 
@@ -327,12 +362,11 @@ async def buy(interaction: discord.Interaction, item: str):
                     current_items.append((inItem["name"], inItem["boost"]))
 
                 # Handle the "companions" or "cosmetics" category
-                elif category in ["companions", "cosmetics"]:
+                elif category == "companions":
                     if any(existing_item[0] == inItem["name"] for existing_item in current_items):
-                        await interaction.response.send_message(f"You already own the companion **{inItem['name']}**!",
-                                                                ephemeral=True)
+                        await interaction.response.send_message(f"You already own the companion **{inItem['name']}**!", ephemeral=True)
                         return
-                    current_items.append((inItem["name"], inItem.get("boost")))
+                    current_items.append((inItem["name"], inItem.get("boost"), inItem["threshold1"], inItem["threshold2"]))
 
                 # Handle invalid categories
                 else:
@@ -354,7 +388,7 @@ async def buy(interaction: discord.Interaction, item: str):
     await interaction.response.send_message(f"Item '{item}' not found in the shop.", ephemeral=True)
 
 
-@tree.command(name="inventory", description="These are priceless!")
+@client.tree.command(name="inventory", description="These are priceless!")
 async def inv(interaction: discord.Interaction):
     authorid = str(interaction.user.id)
 
@@ -391,7 +425,7 @@ async def inv(interaction: discord.Interaction):
     ))
 
 
-@tree.command(name="rock-status", description="take a look at the status of your pet rock!")
+@client.tree.command(name="rock-status", description="take a look at the status of your pet rock!")
 async def rock_status(interaction: discord.Interaction):
     list_users = hasPet.lgetall('hasPet')
     print(list_users)
