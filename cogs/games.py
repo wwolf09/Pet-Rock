@@ -1,57 +1,33 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-import math
-import asyncio
 import pickledb
-import random
-import enum
 
-class games(commands.Cog):
+# Initialize your databases
+hasPet = pickledb.load('cogs/rock', True)
+stats = pickledb.load('cogs/stats', True)
+storage = pickledb.load('cogs/storage', True)
 
-    def __init__(self, bot):
+class Games(commands.Cog):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.stats = stats
 
-    class black_red(enum.Enum):
-        black = "black"
-        red = "red"
+    @app_commands.command(name="explore", description="Lets a companion of yours go exploring.")
+    async def explore(self, interaction: discord.Interaction, companion: str):
+        if not stats.exists('stats'):
+            print('stats not existing')
+            stats.dcreate('stats')
 
-    @commands.command(name="roulette", description = "let's go gambling!")
-    async def roulette(interaction: discord.Interaction, choice: black_red, bet: int):
-        gamble = ["black", "red"]
-        rand = random.choice(gamble)
-        print(choice)
-        print(rand)
+        authorid = str(interaction.user.id)
+        user_companion = storage.dget(authorid, "companions")
 
-        User_Money = stats.dget(str(interaction.user.id), "pebbles")
-        if bet > int(User_Money * 0.15) or bet == 0:
-            pass
-        else:
-            await interaction.response.send_message(content = "Can't gamble **less than 15%** of your pebbles", ephemeral = True)
-            return
+        for name, boost, th1, th2 in user_companion:
+            if companion.lower() == str(name).lower():
+                await interaction.response.send_message(embed = discord.Embed(title="Exploration Time!", description=f"**{name}** ({interaction.user.name}'s companion) went exploring!", colour=discord.Color.green()))
+                return
 
-        if 0 > bet:
-            await interaction.response.send_message(content= "really?", ephemeral = True)
-            return
-
-        if User_Money > bet or User_Money == bet:
-            if rand == "red" and choice == black_red.red or rand == "black" and choice == black_red.black:
-                current_money = stats.dget(str(interaction.user.id), "pebbles")
-                new_money = current_money + (await multiplierCalculator(str(interaction.user.id), (bet*2)))
-                stats.dadd(str(interaction.user.id), ("pebbles", new_money))
-                await interaction.response.send_message(embed=await embed_make(f"Let's go gambling!", f'Received **{(await multiplierCalculator(str(interaction.user.id), (bet*2)))} pebbles!**', discord.Color.green()))
-                print("gambling succeed")
-            else:
-                current_money = stats.dget(str(interaction.user.id), "pebbles")
-                new_money = current_money - bet
-                stats.dadd(str(interaction.user.id), ("pebbles", (new_money)))
-                print("gambling failed")
-                await interaction.response.send_message(embed=await embed_make(f'Aw dang it!', f'Gambling failed. You lost **{bet} pebbles.**',discord.Color.red()))
-        else:
-            await interaction.response.send_message(embed=await embed_make(f'Not enough pebbles!', f'You need more pebbles to gamble!', discord.Color.red()))
+        await interaction.response.send_message(content=f"you don't have {companion}!", ephemeral=True)
 
 
-
-async def setup(bot):
-    await bot.add_cog(games(bot))
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Games(bot))

@@ -1,18 +1,11 @@
 import enum
-from math import trunc
 import math
 import time
-from operator import truediv
 
 import discord
-from Cryptodome.SelfTest.Hash.test_cSHAKE import descr
-from Cryptodome.Util.number import ceil_div
-from discord import app_commands
 from discord.ext import commands
 import random
 import dctoken
-from datetime import datetime
-import pytz
 import pickledb
 import asyncio
 import pathlib
@@ -23,9 +16,9 @@ intents.members = True
 intents.message_content = True
 client = commands.Bot(command_prefix=',', intents=intents)
 
-hasPet = pickledb.load('rock', True)
-stats = pickledb.load('stats', True)
-storage = pickledb.load('storage', True)
+hasPet = pickledb.load('cogs/rock', True)
+stats = pickledb.load('cogs/stats', True)
+storage = pickledb.load('cogs/storage', True)
 
 cogs_dir = pathlib.Path(__file__).parent / "cogs"
 
@@ -104,17 +97,20 @@ async def randomCompanionCheck(id, interaction):
 
 @client.event
 async def on_ready():
-    await client.tree.sync()
-    print('Bot is ready.')
-
     if not hasPet.exists('hasPet'):
         hasPet.lcreate('hasPet')
         stats.dcreate('stats')
         storage.dcreate('storage')
 
+        # Load all extensions (cogs)
     for cog_file in cogs_dir.glob("*.py"):
         if cog_file.name != "__init__.py":
             await client.load_extension(f"cogs.{cog_file.stem}")
+            print(f"Loaded extension: {cog_file.stem}")
+
+
+    await client.tree.sync()
+    print('Bot is ready.')
 
 async def returnstatus(id):
     name = await client.fetch_user(id)
@@ -228,11 +224,14 @@ async def daily(interaction: discord.Interaction):
         print(last_claim)
         if current_time - last_claim >= 86400:
             print("true")
-            new_money = money + 100 * (stats.dget(str(author_id), "level") / 1.1)
+            base_reward = 1000
+            level_bonus = (stats.dget(str(author_id), "level") // 10) * 1000
+            reward = base_reward + level_bonus
+            new_money = money + (base_reward + level_bonus)
             stats.dadd(str(interaction.user.id), ("pebbles", new_money))
             print("sent")
             stats.dadd(str(interaction.user.id), ("last_daily_claim", current_time))
-            await interaction.response.send_message(embed= await embed_make("Daily Claimed!",f'You now have **{round(new_money)}** pebbles!', discord.Color.green()))
+            await interaction.response.send_message(embed= await embed_make("Daily Claimed!",f'You have received **{round(reward)}** pebbles!', discord.Color.green()))
         else:
             await interaction.response.send_message(embed = await embed_make("Daily already claimed!", f'Please wait for your next claim!', discord.Color.red()))
 
@@ -251,7 +250,7 @@ async def roulette(interaction: discord.Interaction, choice: black_red, bet: int
     if bet > int(User_Money * 0.15) or bet == 0:
         pass
     else:
-        await interaction.response.send_message(content = "Can't gamble **less than 15%** of your pebbles", ephemeral = True)
+        await interaction.response.send_message(content = f"Can't gamble **less than 15%** of your pebbles ({(round(User_Money * 0.15))} required pebbles)", ephemeral = True)
         return
 
     if 0 > bet:
@@ -288,8 +287,8 @@ shop_items = {
         {"name": "Bato", "price": 10000, "description": "Please do not let this guy run senate.", "boost": 1.1, "threshold1": 250, "threshold2": 500},
         {"name": "The Rock", "price": 50000, "description": "I think this guy knows Kevin Hart!", "boost": 1.1, "threshold1": 300, "threshold2": 600},
         {"name": "Rocky Road", "price": 200000, "description": "Ice cream or the road? Who knows?", "boost": 1.2, "threshold1": 500, "threshold2": 1000},
-        {"name": "Rocky Balboa", "price": 1000000, "description": "I'm in good terms with this guy!", "boost": 1.5, "threshold1": 5000, "threshold2": 7500},
-        {"name": "Kuwumi", "price": 50000000, "description": "this name sounds familiar.", "boost": 1.7, "threshold1": 100000, "threshold2": 150000}
+        {"name": "Rocky Balboa", "price": 1000000, "description": "I'm in good terms with this guy!", "boost": 1.5, "threshold1": 5000, "threshold2": 7500}
+        # {"name": "Kuwumi", "price": 50000000, "description": "this name sounds familiar.", "boost": 1.7, "threshold1": 100000, "threshold2": 150000}
     ],
 
     "cosmetics": [
@@ -367,6 +366,13 @@ async def buy(interaction: discord.Interaction, item: str):
                         await interaction.response.send_message(f"You already own the companion **{inItem['name']}**!", ephemeral=True)
                         return
                     current_items.append((inItem["name"], inItem.get("boost"), inItem["threshold1"], inItem["threshold2"]))
+
+                elif category == "cosmetics":
+                    if any(existing_item[0] == inItem["name"] for existing_item in current_items):
+                        await interaction.response.send_message(f"You already own the cosmetic **{inItem['name']}**!",
+                                                                ephemeral=True)
+                        return
+                    current_items.append((inItem["name"]))
 
                 # Handle invalid categories
                 else:
